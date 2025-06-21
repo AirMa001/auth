@@ -22,4 +22,8 @@ function error(res, message, data = null, statusCode = 400) {
   });
 }
 
-module.exports = { sendResponse, success, error };
+function validationError(res, errors, statusCode = 422) {
+  return res.status(statusCode).json({ status: 'fail', errors });
+}
+
+module.exports = { sendResponse, success, error, validationError };

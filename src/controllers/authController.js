@@ -3,10 +3,13 @@ const prisma = new PrismaClient();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const ResponseHelper = require("../utils/responseHelper");
+const { sendEmail } = require("../utils/emailService");
 // const sendVerificationEmail = require("../utils/emailHelper"); // Implement as needed
 
+
+
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
-const EMAIL_TOKEN_EXPIRY = "1h";
+const EMAIL_TOKEN_EXPIRY = "24h";
 
 class AuthController {
   // Signup: username, email, password
@@ -40,9 +43,16 @@ class AuthController {
       });
 
       // Generate email verification token
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: EMAIL_TOKEN_EXPIRY });
+      const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: EMAIL_TOKEN_EXPIRY });
 
-      // await sendVerificationEmail(email, token); // Implement email sending
+      // Send verification email
+      const verifyLink = `${process.env.BASE_URL || 'http://localhost:5000'}/api/auth/verify-email?token=${token}`;
+      console.log('email' , user.email);
+      sendEmail(
+        user.email,
+        'Verify your NaijaHarvest account',
+        `Please verify your account by clicking: ${verifyLink}`
+      );
 
       return ResponseHelper.success(res, "Please check your email to verify your account.", {
         verificationRequired: true
@@ -98,7 +108,7 @@ class AuthController {
       if (!valid) {
         return ResponseHelper.error(res, "Invalid credentials", null);
       }
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ userId: user.id, role : user.role, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
       return ResponseHelper.success(res, "Login successful", { token });
     } catch (error) {
       console.error("Login error:", error);

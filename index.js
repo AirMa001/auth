@@ -8,14 +8,14 @@ const rateLimit = require("express-rate-limit") // Rate limiting
 require("dotenv").config() // Load environment variables
 
 // Import route modules
-// const authRoutes = require("./routes/auth")
-// const userRoutes = require("./routes/users")
-// const adminRoutes = require("./routes/admin")
+const authRoutes = require("./src/routes/auth.routes")
+const userRoutes = require("./src/routes/user.routes")
+const adminRoutes = require("./src/routes/admin.routes")
 // const profileRoutes = require("./routes/profiles")
 // const reviewRoutes = require("./routes/reviews")
 // const notificationRoutes = require("./routes/notifications")
 // const onboardingRoutes = require("./routes/onboarding")
-const registrationRoute = require("./src/routes/registrationRoute.js") // Registration helpers
+// Registration helpers
 // const emailRoutes = require("./routes/emails")
 
 // Import middleware
@@ -82,14 +82,14 @@ app.get("/health", (req, res) => {
  * API ROUTES
  * All routes are prefixed with /api for clear API versioning
  */
-// app.use("/api/auth", authRoutes) // Authentication routes (register, login, etc.)
-// app.use("/api/users", userRoutes) // User management routes
-// app.use("/api/admin", adminRoutes) // Admin-only routes
+app.use("/api/auth", authRoutes) // Authentication routes (register, login, etc.)
+app.use("/api/users", userRoutes) // User management routes
+app.use("/api/admin", adminRoutes) // Admin-only routes
 // app.use("/api/profiles", profileRoutes) // User profile management
 // app.use("/api/reviews", reviewRoutes) // Review and rating system
 // app.use("/api/notifications", notificationRoutes) // Notification management
 // app.use("/api/onboarding", onboardingRoutes) // User onboarding flow
-app.use("/api/register", registrationRoute) // Registration helpers
+
 // app.use("/api/emails", emailRoutes) // Email management (admin only)
 
 /**

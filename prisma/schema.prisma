@@ -87,12 +87,12 @@ enum LogisticsType {
 // The central model for any entity that can log in.
 model User {
   id String @id @default(cuid())
-  email String? @unique
-  phone String @unique
-  firstName String
-  lastName String
+  username String @unique
+  email String @unique
+  firstName String?
+  lastName String?
   passwordHash String
-  role Role
+  role Role?
   status UserStatus @default(PENDING_VERIFICATION)
   otp String?
   otpExpiresAt DateTime?
@@ -126,7 +126,6 @@ model FarmerProfile {
   farmLocation Json? // GeoJSON for farm pinning.
   averageRating Float @default(0.0)
   totalReviews Int @default(0)
-
   // Relationships
   productListings ProductListing[]
   ordersReceived Order[] @relation("FarmerOrders")
