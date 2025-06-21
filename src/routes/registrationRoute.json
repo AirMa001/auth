@@ -1,0 +1,48 @@
+{
+  "endpoint": "/api/register",
+  "method": "POST",
+  "description": "Register a new user using email and password only.",
+  "request": {
+    "body": {
+      "email": "string (required)",
+      "password": "string (required)"
+    }
+  },
+  "response": {
+    "success": {
+      "status": "success",
+      "message": "Registration successful. Please verify your email.",
+      "data": {
+        "userId": "string",
+        "verificationRequired": true
+      }
+    },
+    "validationError": {
+      "status": "fail",
+      "message": "Validation error",
+      "data": [
+        {
+          "field": "string",
+          "message": "string"
+        }
+      ]
+    },
+    "error": {
+      "status": "error",
+      "message": "Registration failed",
+      "data": null
+    }
+  }
+}
+          "field": "string",
+          "message": "string"
+        }
+      ]
+    },
+    "error": {
+      "status": "error",
+      "message": "Registration failed",
+      "data": null
+    }
+  }
+}

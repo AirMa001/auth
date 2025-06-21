@@ -1,0 +1,386 @@
+// This is your Prisma schema file for the NaijaHarvest Connect project.
+// It is designed to be comprehensive and fulfill all requirements from the BRD.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -------------------------------------------
+// ENUMS: For defining strict, controlled sets of values.
+// -------------------------------------------
+
+enum Role {
+  FARMER
+  BUYER
+  LOGISTICS_PARTNER
+  ADMIN
+}
+
+// UserStatus directly supports suspending/banning users as per admin requirements.
+enum UserStatus {
+  PENDING_VERIFICATION // New user, cannot transact.
+  ACTIVE // Verified and able to transact.
+  SUSPENDED // Temporarily banned by an Admin. Cannot log in or transact.
+  DEACTIVATED // Permanently banned or self-deactivated.
+}
+
+// BuyerType accommodates B2B, Group Buys, and future B2C users.
+enum BuyerType {
+  BUSINESS // A registered company or enterprise.
+  GROUP_BUY // An individual coordinating a purchase for a group.
+  INDIVIDUAL // For future B2C expansion.
+}
+
+enum OrderStatus {
+  PENDING_CONFIRMATION // Buyer has placed, Farmer has not accepted.
+  CONFIRMED // Farmer has confirmed the order.
+  AWAITING_PAYMENT // Order is confirmed, waiting for buyer's payment.
+  AWAITING_PICKUP // Paid, waiting for logistics partner to pick up.
+  IN_TRANSIT // Picked up and on its way to the buyer.
+  DELIVERED // Logistics marked as delivered, awaiting buyer confirmation.
+  COMPLETED // Buyer confirmed receipt, no disputes, payout can be triggered.
+  DISPUTED // A dispute has been raised for this order.
+  CANCELLED // Order cancelled by user or admin.
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REFUNDED
+}
+
+enum DisputeStatus {
+  OPEN // Raised by user.
+  IN_REVIEW // Admin is investigating.
+  RESOLVED // Admin has made a decision.
+  CLOSED // Finalized.
+}
+
+enum NotificationType {
+  NEW_ORDER
+  ORDER_UPDATE
+  PAYMENT_STATUS
+  NEW_MESSAGE
+  DISPUTE_UPDATE
+  PLATFORM_ANNOUNCEMENT
+  MATCHMAKING_SUGGESTION
+}
+
+enum LogisticsType {
+  PLATFORM_PARTNER // Logistics handled by a NaijaHarvest vetted partner.
+  BUYER_PICKUP // Buyer arranges their own logistics to pick up from the farmer.
+  FARMER_DELIVERY // Farmer arranges to deliver to the buyer's location.
+}
+
+
+// -------------------------------------------
+// CORE USER & PROFILE MODELS
+// -------------------------------------------
+
+// The central model for any entity that can log in.
+model User {
+  id String @id @default(cuid())
+  email String? @unique
+  phone String @unique
+  firstName String
+  lastName String
+  passwordHash String
+  role Role
+  status UserStatus @default(PENDING_VERIFICATION)
+  otp String?
+  otpExpiresAt DateTime?
+  lastLogin DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  farmerProfile FarmerProfile?
+  buyerProfile BuyerProfile?
+  logisticsProfile LogisticsPartner?
+  adminProfile AdminProfile?
+  addresses Address[]
+  notifications Notification[]
+  sentReviews Review[] @relation("SentReviews")
+  receivedReviews Review[] @relation("ReceivedReviews")
+  disputesRaised Dispute[] @relation("DisputeRaiser")
+  transactions Transaction[]
+  searchHistory Json? // For storing buyer search queries (AI feature).
+  preferences Json? // For storing user preferences for matchmaking (AI feature).
+}
+
+model FarmerProfile {
+  id String @id @default(cuid())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+  farmName String
+  bio String? @db.Text
+  isVerified Boolean @default(false)
+  verificationDocs Json? // URLs to stored docs like Farmer's ID.
+  farmLocation Json? // GeoJSON for farm pinning.
+  averageRating Float @default(0.0)
+  totalReviews Int @default(0)
+
+  // Relationships
+  productListings ProductListing[]
+  ordersReceived Order[] @relation("FarmerOrders")
+}
+
+// Updated to be flexible for all buyer types.
+model BuyerProfile {
+  id String @id @default(cuid())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+  buyerType BuyerType
+  displayName String // Auto-populated with companyName or user's full name.
+  companyName String? // Optional, for BUSINESS buyer type.
+  businessRegNumber String?
+  isVerified Boolean @default(false)
+  verificationDocs Json? // URLs to business registration docs.
+  averageRating Float @default(0.0)
+  totalReviews Int @default(0)
+
+  // Relationships
+  ordersPlaced Order[] @relation("BuyerOrders")
+  savedSearches Json? // To store saved search filter criteria.
+}
+
+model LogisticsPartner {
+  id String @id @default(cuid())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+  companyName String
+  isVetted Boolean @default(false)
+  averageRating Float @default(0.0)
+  totalReviews Int @default(0)
+
+  // Relationships
+  assignments LogisticsAssignment[]
+}
+
+model AdminProfile {
+  id String @id @default(cuid())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+
+  // Relationships
+  disputesManaged Dispute[] @relation("DisputeManager")
+}
+
+
+// -------------------------------------------
+// PRODUCT & CATALOG MODELS
+// -------------------------------------------
+
+model ProductListing {
+  id String @id @default(cuid())
+  farmerId String
+  title String
+  description String? @db.Text
+  photos String[] // Array of image URLs.
+  videoUrl String?
+  quantityAvailable Float
+  pricePerUnit Float
+  minOrderQuantity Float @default(1.0)
+  isNegotiable Boolean @default(false)
+  location String // e.g., "Jos, Plateau".
+  geoPoint Json? // GeoJSON for distance-based sorting.
+  availableFrom DateTime
+  availableTo DateTime
+  isActive Boolean @default(true) // Allows farmers to pause/unpause listings.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  farmer FarmerProfile @relation(fields: [farmerId], references: [id])
+  categoryId String
+  category CropCategory @relation(fields: [categoryId], references: [id])
+  varietyId String
+  variety CropVariety @relation(fields: [varietyId], references: [id])
+  unitOfMeasureId String
+  unitOfMeasure UnitOfMeasure @relation(fields: [unitOfMeasureId], references: [id])
+  orderItems OrderItem[]
+}
+
+model CropCategory {
+  id String @id @default(cuid())
+  name String @unique
+  varieties CropVariety[]
+  listings ProductListing[]
+}
+
+model CropVariety {
+  id String @id @default(cuid())
+  name String
+  categoryId String
+  category CropCategory @relation(fields: [categoryId], references: [id])
+  listings ProductListing[]
+
+  @@unique([name, categoryId])
+}
+
+model UnitOfMeasure {
+  id String @id @default(cuid())
+  name String @unique // e.g., "Kilogram", "Basket", "Tonne".
+  abbreviation String @unique // e.g., "kg", "basket", "t".
+  conversionToKg Float? // e.g., a standard "Basket" of tomatoes might be 25kg.
+  listings ProductListing[]
+}
+
+
+// -------------------------------------------
+// ORDERING & TRANSACTIONAL MODELS
+// -------------------------------------------
+
+model Order {
+  id String @id @default(cuid())
+  buyerId String
+  farmerId String
+  status OrderStatus @default(PENDING_CONFIRMATION)
+  totalAmount Float // Sum of (item.quantity * item.priceAtTimeOfOrder).
+  commissionFee Float
+  logisticsFee Float @default(0.0)
+  finalAmount Float // totalAmount + commissionFee + logisticsFee.
+  paymentStatus PaymentStatus @default(PENDING)
+  logisticsType LogisticsType
+  proofOfDelivery String? // URL to photo or confirmation code.
+  expectedDeliveryDate DateTime?
+  actualDeliveryDate DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  buyer BuyerProfile @relation("BuyerOrders", fields: [buyerId], references: [id])
+  farmer FarmerProfile @relation("FarmerOrders", fields: [farmerId], references: [id])
+  items OrderItem[]
+  deliveryAddressId String?
+  deliveryAddress Address? @relation(fields: [deliveryAddressId], references: [id])
+  transactions Transaction[]
+  dispute Dispute?
+  logisticsAssignment LogisticsAssignment?
+  review Review?
+  negotiationSession NegotiationSession?
+}
+
+model OrderItem {
+  id String @id @default(cuid())
+  orderId String
+  productListingId String
+  quantity Float
+  unitOfMeasure String // Snapshot of unit name at time of order.
+  priceAtTimeOfOrder Float // Snapshot of price at time of order.
+
+  // Relationships
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productListing ProductListing @relation(fields: [productListingId], references: [id])
+}
+
+model NegotiationSession {
+  id String @id @default(cuid())
+  orderId String @unique
+  messages Json // Array of message objects: { senderId, message, timestamp }.
+  status String // e.g., "ACTIVE", "ACCEPTED", "REJECTED".
+
+  // Relationship
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+
+// -------------------------------------------
+// SUPPORTING & AUXILIARY MODELS
+// -------------------------------------------
+
+model Transaction {
+  id String @id @default(cuid())
+  userId String
+  orderId String
+  amount Float
+  type String // "PAYMENT", "PAYOUT", "REFUND", "LOGISTICS_PAYMENT".
+  status PaymentStatus
+  gatewayReference String? // Reference ID from Paystack/Flutterwave.
+  createdAt DateTime @default(now())
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id])
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+model Review {
+  id String @id @default(cuid())
+  orderId String @unique
+  reviewerId String
+  subjectId String
+  rating Int // 1 to 5.
+  comment String? @db.Text
+  createdAt DateTime @default(now())
+
+  // Relationships
+  order Order @relation(fields: [orderId], references: [id])
+  reviewer User @relation("SentReviews", fields: [reviewerId], references: [id])
+  subject User @relation("ReceivedReviews", fields: [subjectId], references: [id])
+}
+
+model Dispute {
+  id String @id @default(cuid())
+  orderId String @unique
+  raisedById String
+  assignedAdminId String?
+  reason String
+  evidence String[] // Array of URLs to photos/docs.
+  status DisputeStatus @default(OPEN)
+  resolutionNotes String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  order Order @relation(fields: [orderId], references: [id])
+  raisedBy User @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  assignedAdmin AdminProfile? @relation("DisputeManager", fields: [assignedAdminId], references: [id])
+}
+
+model LogisticsAssignment {
+  id String @id @default(cuid())
+  orderId String @unique
+  logisticsPartnerId String
+  status String // "ASSIGNED", "ACCEPTED", "PICKED_UP", "IN_TRANSIT", "DELIVERED".
+  trackingCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  order Order @relation(fields: [orderId], references: [id])
+  logisticsPartner LogisticsPartner @relation(fields: [logisticsPartnerId], references: [id])
+}
+
+model Notification {
+  id String @id @default(cuid())
+  userId String
+  type NotificationType
+  content String
+  isRead Boolean @default(false)
+  relatedId String? // e.g., orderId, disputeId to deep-link to the relevant item in-app.
+  createdAt DateTime @default(now())
+
+  // Relationship
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Address {
+  id String @id @default(cuid())
+  userId String
+  street String
+  city String
+  state String
+  country String @default("Nigeria")
+  isDefault Boolean @default(false)
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+}
