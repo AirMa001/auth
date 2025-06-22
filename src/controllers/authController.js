@@ -4,9 +4,6 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const ResponseHelper = require("../utils/responseHelper");
 const { sendEmail } = require("../utils/emailService");
-// const sendVerificationEmail = require("../utils/emailHelper"); // Implement as needed
-
-
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const EMAIL_TOKEN_EXPIRY = "24h";
@@ -43,7 +40,7 @@ class AuthController {
       });
 
       // Generate email verification token
-      const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: EMAIL_TOKEN_EXPIRY });
+      const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: "1hr" });
 
       // Send verification email
       const verifyLink = `${process.env.BASE_URL || 'http://localhost:5000'}/api/auth/verify-email?token=${token}`;
@@ -59,7 +56,7 @@ class AuthController {
       });
     } catch (error) {
       console.error("Signup error:", error);
-      ResponseHelper.error(res, "Signup failed", null);
+      ResponseHelper.error(res, "Signup failed", error);
     }
   }
 
@@ -84,7 +81,7 @@ class AuthController {
       return ResponseHelper.success(res, "Verification successful! Please log in.", null);
     } catch (error) {
       console.error("Verify email error:", error);
-      ResponseHelper.error(res, "Verification failed", null);
+      ResponseHelper.error(res, "Verification failed", error);
     }
   }
 
@@ -113,6 +110,41 @@ class AuthController {
     } catch (error) {
       console.error("Login error:", error);
       ResponseHelper.error(res, "Login failed", null);
+    }
+  }
+
+  // 5.1.6 forgot password
+  static async forgotPassword(req, res) {
+    try {
+      const { email } = req.body;
+      if (!email) return ResponseHelper.validationError(res, [{ field:"email", message:"Required" }]);
+      const user = await prisma.user.findUnique({ where:{ email } });
+      if (!user) return ResponseHelper.error(res,"Email not found");
+      const token = jwt.sign({ userId:user.id }, JWT_SECRET, { expiresIn: EMAIL_TOKEN_EXPIRY });
+      const link = `${process.env.BASE_URL||'http://localhost:5000'}/api/auth/reset-password?token=${token}`;
+      sendEmail(user.email, "Reset your password", `Click to reset: ${link}`);
+      return ResponseHelper.success(res,"Reset link sent",{"token": token });
+    } catch (e) {
+      console.error("Forgot password error:",e);
+      ResponseHelper.error(res,"Failed to send reset link", e);
+    }
+  }
+  // 5.1.6 reset password
+  static async resetPassword(req, res) {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) return ResponseHelper.validationError(res,[
+        { field:!token?"token":"newPassword", message:"Required" }
+      ]);
+      let payload;
+      try { payload = jwt.verify(token, JWT_SECRET); }
+      catch { return ResponseHelper.error(res,"Invalid or expired token"); }
+      const hash = await bcrypt.hash(newPassword,10);
+      await prisma.user.update({ where:{ id: payload.userId }, data:{ passwordHash:hash } });
+      return ResponseHelper.success(res,"Password reset successful", null);
+    } catch (e) {
+      console.error("Reset password error:",e);
+      ResponseHelper.error(res,"Password reset failed", e);
     }
   }
 }

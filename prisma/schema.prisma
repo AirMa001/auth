@@ -99,6 +99,7 @@ model User {
   lastLogin DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  profilePictureUrl String? // stores presigned URL for user’s avatar
 
   // Relationships
   farmerProfile FarmerProfile?
