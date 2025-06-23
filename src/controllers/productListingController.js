@@ -4,28 +4,60 @@ const ResponseHelper = require('../utils/responseHelper')
 
 class ProductListingController {
   static async createListing(req, res) {
-    try {
-      const newListing = await prisma.productListing.create({ data: req.body })
-      // notify via socket
-      const io = req.app.get('socketio')
-      io.emit('listingCreated', newListing)
+      try {
+        const {
+          title,
+          location,
+          pricePerUnit,
+          availableFrom,
+          availableTo, 
+          farmer,
+          category,
+          variety,
+          unitOfMeasure
+        } = req.body;
 
-      ResponseHelper.success(res, 'Product listing created', newListing)
-    } catch (err) {
-      console.error('Create listing error:', err)
-      ResponseHelper.error(res, 'Failed to create listing', err)
+        const quantityAvailable = parseFloat(req.body.quantityAvailable);
+        const parsedPrice = parseFloat(pricePerUnit);
+        const photoUrls = req.files?.map(file => `/uploads/${file.filename}`) || [];
+        const videoUrls = videoFiles.map(file => `/uploads/${file.filename}`) || []
+
+        const newListing = await prisma.productListing.create({
+          data: {
+            title,
+            location,
+            quantityAvailable,
+            pricePerUnit: parsedPrice,
+            availableFrom: new Date(availableFrom),
+            availableTo: new Date(availableTo),
+            farmer,
+            unitOfMeasure,
+            category,
+            variety,
+            photos: photoUrls,
+            videos: videoUrls
+          }
+        });
+
+        const io = req.app.get('socketio');
+        io.emit('listingCreated', newListing);
+
+        ResponseHelper.success(res, 'Product listing created', newListing);
+      } catch (err) {
+        console.error('Create listing error:', err);
+      ResponseHelper.error(res, 'Failed to create listing', err);
     }
   }
 
-  static async getAllListings(req, res) {
-    try {
-      const listings = await prisma.productListing.findMany()
-      ResponseHelper.success(res, 'Listings fetched', listings)
-    } catch (err) {
-      console.error('Get all listings error:', err)
-      ResponseHelper.error(res, 'Failed to fetch listings', err)
-    }
+static async getAllListings(req, res) {
+  try {
+    const listings = await prisma.productListing.findMany()
+    ResponseHelper.success(res, 'Listings fetched', listings)
+  } catch (err) {
+    console.error('Get all listings error:', err)
+    ResponseHelper.error(res, 'Failed to fetch listings', err)
   }
+}
 
   static async getListingById(req, res) {
     try {
@@ -98,6 +130,45 @@ class ProductListingController {
       ResponseHelper.error(res, 'Failed to unpause listing', err)
     }
   }
+
+  static async placeOrder(req, res) {
+  try {
+    const { productId, quantityOrdered } = req.body;
+    const product = await prisma.productListing.findUnique({
+      where: { id: productId }
+    });
+    if (!product) {
+      return ResponseHelper.error(res, 'Product not found');
+    }
+    if (product.quantityAvailable < quantityOrdered) {
+      return ResponseHelper.error(res, 'Not enough stock available');
+    }
+    // Decrease the available quantity
+    const updatedProduct = await prisma.productListing.update({
+      where: { id: productId },
+      data: {
+        quantityAvailable: product.quantityAvailable - quantityOrdered
+      }
+    });
+
+    // (Optional) Save order details
+    const order = await prisma.order.create({
+      data: {
+        productId,
+        quantity: quantityOrdered,
+        status: 'success', // assuming you have status tracking
+        // add other details like buyerId, timestamp, etc.
+      }
+    });
+    ResponseHelper.success(res, 'Order placed successfully', {
+      order,
+      updatedProduct
+    });
+  } catch (err) {
+    console.error('Place order error:', err);
+    ResponseHelper.error(res, 'Failed to place order', err);
+  }
+}
 }
 
 module.exports = ProductListingController

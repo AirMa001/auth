@@ -1,28 +1,28 @@
 5. Functional Requirements 
 (Details expanded from previous discussions) 
-5.1 User Management & Authentication 
-5.1.1 Secure registration process (Email/Phone + Password). 
-5.1.2 Role selection (Farmer, Buyer, Logistics). 
-5.1.3 OTP verification (SMS/Email). 
-5.1.4 KYC/KYB process (ID upload, Business Reg docs, farm location pinning/verification). 
-Admin approval workflow. 
-5.1.5 User profile creation and editing (contact details, address, bank info, business info, profile 
-picture). 
-5.1.6 Password reset functionality. 
-5.1.7 User rating and review submission and display. 
-5.1.8 User account suspension/deactivation (Admin). 
-5.1.9 Role-based access control. 
+//5.1 User Management & Authentication 
+//5.1.1 Secure registration process (Email/Phone + Password). 
+//5.1.2 Role selection (Farmer, Buyer, Logistics). 
+//5.1.3 OTP verification (SMS/Email). 
+//5.1.4 KYC/KYB process (ID upload, Business Reg docs, farm location pinning/verification). 
+//Admin approval workflow. 
+//5.1.5 User profile creation and editing (contact details, address, bank info, business info, profile 
+//picture). 
+//5.1.6 Password reset functionality. 
+//5.1.7 User rating and review submission and display. 
+//5.1.8 User account suspension/deactivation (Admin). 
+//5.1.9 Role-based access control. 
 
 
 
 5.2 Product Listing & Catalog 
-5.2.1 Farmer ability to create new listings (Crop type, variety, grade options, quantity available, 
-unit of measure [kg, tonne, local units with conversion], price/price range, location, available date 
-range). 
-5.2.2 Ability to upload multiple photos and short video per listing. 
-5.2.3 Inventory tracking (decrement quantity upon successful order). 
-5.2.4 Ability to edit, pause, or delete active listings. 
-5.2.5 Admin ability to manage crop categories, varieties, grades, and units. 
+//5.2.1 Farmer ability to create new listings (Crop type, variety, grade options, quantity available, 
+//unit of measure [kg, tonne, local units with conversion], price/price range, location, available date 
+//range). 
+//5.2.2 Ability to upload multiple photos and short video per listing. 
+//5.2.3 Inventory tracking (decrement quantity upon successful order). 
+//5.2.4 Ability to edit, pause, or delete active listings. 
+//5.2.5 Admin ability to manage crop categories, varieties, grades, and units. 
 
 
 5.3 Search & Discovery 
@@ -33,9 +33,9 @@ range).
 
 
 5.4 Ordering & Negotiation 
-5.4.1 Buyer ability to add items to cart or place direct order. 
-5.4.2 Option for buyer to make an offer if farmer set a price range (negotiation workflow via 
-messaging/structured offers). 
+//5.4.1 Buyer ability to add items to cart or place direct order. 
+//5.4.2 Option for buyer to make an offer if farmer set a price range (negotiation workflow via 
+//messaging/structured offers). 
 5.4.3 Order summary review before confirmation (incl. estimated fees). 
 5.4.4 Order confirmation notifications to buyer and farmer. 
 5.4.5 Order history tracking for both parties. 
@@ -79,9 +79,9 @@ aggregation/pickup - future enhancement detail TBD).
 
 5.8 Communication & Notifications 
 5.8.1 In-app messaging between Buyer and Farmer regarding specific orders. 
-5.8.2 Automated system notifications (SMS/Email/Push) for: Order confirmation, Payment 
+//5.8.2 Automated system notifications (SMS/Email/Push) for: Order confirmation, Payment 
 success/failure, Logistics updates, Payout confirmation, New messages, Dispute updates. 
-5.8.3 Broadcast notification capability for Admins (e.g., maintenance alerts). 
+//5.8.3 Broadcast notification capability for Admins (e.g., maintenance alerts). 
 
 
 

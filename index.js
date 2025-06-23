@@ -11,6 +11,8 @@ require("dotenv").config() // Load environment variables
 const authRoutes = require("./src/routes/auth.routes")
 const userRoutes = require("./src/routes/user.routes")
 const adminRoutes = require("./src/routes/admin.routes")
+const productListingroutes = require("./src/routes/productListing.routes")
+const orderAndNegotiationRoute = require("./src/routes/order.routes")
 // const profileRoutes = require("./routes/profiles")
 // const reviewRoutes = require("./routes/reviews")
 // const notificationRoutes = require("./routes/notifications")
@@ -82,9 +84,12 @@ app.get("/health", (req, res) => {
  * API ROUTES
  * All routes are prefixed with /api for clear API versioning
  */
+
+app.use("/api/products", productListingroutes)
 app.use("/api/auth", authRoutes) // Authentication routes (register, login, etc.)
 app.use("/api/users", userRoutes) // User management routes
 app.use("/api/admin", adminRoutes) // Admin-only routes
+app.use("/api/order", orderAndNegotiationRoute) // order and negotiation
 // app.use("/api/profiles", profileRoutes) // User profile management
 // app.use("/api/reviews", reviewRoutes) // Review and rating system
 // app.use("/api/notifications", notificationRoutes) // Notification management
