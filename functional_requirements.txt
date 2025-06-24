@@ -74,6 +74,11 @@ aggregation/pickup - future enhancement detail TBD).
 5.7.4 Automated calculation and deduction of platform commission and fees. 
 5.7.5 Secure and timely payout process to Farmer's registered bank account/wallet. 
 5.7.6 Transaction history and statement generation for users and admin.
+- Support multiple Paystack channels (USSD, bank transfer, saved cards).
+- Platform Wallet: users can top up, view balance, and pay via wallet.
+- Admin export: CSV download of filtered transactions & orders.
+- Webhook retries (up to 3) and enhanced error logging.
+- Dispute resolution triggers refund and updates order status to REFUNDED.
 
 
 
@@ -117,3 +122,61 @@ representation/conversion).
 5.11.8 Logistics partner management. 
 5.11.9 Content management (FAQs, announcements). 
 5.11.10 Reporting and Analytics access. 
+
+
+
+
+Here’s a quick breakdown:
+
+1. Endpoints & When to Use  
+- POST /api/product-listings (createListing)  
+  • Farmer uploads photos/videos and details → new listing goes live.  
+- GET /api/product-listings & GET /api/product-listings/:id  
+  • Buyer browses available listings.  
+
+- POST /api/orders/direct/:buyerId (placeDirectOrder)  
+  • Buyer skips negotiation, instantly places a one‐off order against a listing.  
+  • Enforces min-order, inventory decrement, transaction record, notifications, email.  
+
+- POST /api/orders/order (placeOrder)  
+  • Buyer places order after an agreed negotiation. Usually called once session.status="ACCEPTED".  
+  • Similar to direct but tied to req.user, you might carry over negotiated terms.  
+
+- Negotiation flow:  
+  • POST /api/orders/:orderId/negotiate → open a session.  
+  • POST /api/orders/:orderId/negotiate/msg → exchange messages.  
+  • PUT /api/orders/:orderId/negotiate → update session to ACCEPTED/REJECTED.  
+
+- GET /api/orders/summary/:orderId  
+  • Preview order details (items, pricing, parties) before payment.  
+
+- GET /api/orders/history/buyer/:buyerId & /history/farmer/:farmerId  
+  • Fetch past orders for each role.  
+
+2. End-to-End Flow  
+A. Farmer Creates a Listing  
+  1. Authenticate as FARMER (JWT → auth middleware).  
+  2. POST /api/product-listings with fields + up to 10 photos & 5 videos.  
+  3. Server stores record, emits socket “listingCreated.”  
+
+B. Buyer Browses & Initiates an Order  
+  1. Authenticate as BUYER.  
+  2. GET /api/product-listings → view all or GET /api/product-listings/:id.  
+  3. If they want to negotiate:  
+     • POST /api/orders/:listingId/negotiate → create negotiationSession.  
+     • POST /api/orders/:listingId/negotiate/msg {senderId,msg}.  
+     • Buyer & farmer exchange until one does PUT /api/orders/:listingId/negotiate {status:"ACCEPTED"}.  
+
+C. Placing the Final Order  
+  – After ACCEPTED negotiation:  
+     • Buyer calls POST /api/orders/order {productId,quantityOrdered,…}.  
+  – Or skip negotiation entirely with POST /api/orders/direct/:buyerId.  
+
+D. Post-Order Processing  
+  1. Inventory decremented.  
+  2. Transaction record (PENDING payment).  
+  3. Notification + email sent to farmer.  
+  4. Buyer/ farmer can view on GET /api/orders/history/…  
+  5. Payment integration and status updates can be layered on top.  
+
+This covers how placeDirectOrder (no back-and-forth) vs. placeOrder (post-negotiation) differ, and which HTTP calls fire at each business step.

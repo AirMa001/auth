@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 const ResponseHelper = require('../utils/responseHelper')
+const { sendEmail } = require('../utils/emailService')
 
 class NegotiationController {
   static async initSession(req, res) {
@@ -42,6 +43,28 @@ class NegotiationController {
         where: { orderId: req.params.id },
         data: { status }
       })
+
+      // Notify other party
+      await prisma.notification.create({
+        data: {
+          userId: session.order.buyerId === req.user.userId
+                  ? session.order.farmerId
+                  : session.order.buyerId,
+          type: 'NEW_MESSAGE',
+          content: `Negotiation ${status.toLowerCase()} for order ${req.params.id}`,
+          relatedId: req.params.id
+        }
+      })
+      const otherPartyEmail = (await prisma.user.findUnique({
+        where: { id: session.order.buyerId === req.user.userId ? session.order.farmerId : session.order.buyerId },
+        select: { email: true }
+      })).email
+
+      sendEmail(
+        otherPartyEmail,          // fetch from DB: the other party’s email
+        'Negotiation Updated',
+        `Your negotiation for order ${req.params.id} is now ${status}`
+      )
       ResponseHelper.success(res, `Negotiation ${status.toLowerCase()}`, session)
     } catch (err) {
       console.error('Update negotiation error:', err)
@@ -88,6 +111,13 @@ const placeDirectOrder = async (req, res) => {
     if (!listing) return ResponseHelper.error(res, 'Product listing not found')
     if (quantity > listing.quantityAvailable) return ResponseHelper.error(res, 'Not enough quantity available')
 
+    // enforce minimum order quantity
+    if (quantity < listing.minOrderQuantity) {
+      return ResponseHelper.validationError(res, [
+        { field:'quantity', message:`Must order at least ${listing.minOrderQuantity}` }
+      ])
+    }
+
     const price = listing.pricePerUnit
     const totalAmount = quantity * price
     const commissionFee = totalAmount * 0.05 // 5% commission example
@@ -114,6 +144,30 @@ const placeDirectOrder = async (req, res) => {
       include: { items: true }
     })
 
+    // initial transaction record
+    await prisma.transaction.create({
+      data: {
+        userId: req.params.buyerId,
+        orderId: order.id,
+        amount: order.totalAmount,
+        type: 'PAYMENT',
+        status: 'PENDING'
+      }
+    })
+
+    // notify farmer
+    await prisma.notification.create({
+      data:{
+        userId: order.farmerId,
+        type: 'NEW_ORDER',
+        content: `New order ${order.id} from buyer ${req.params.buyerId}`,
+        relatedId: order.id
+      }
+    })
+    // send email to farmer
+    const farmer = await prisma.user.findUnique({ where:{ id:order.farmerId }})
+    sendEmail(farmer.email, 'New Order Received', `Order ${order.id} placed.`)
+
     // Decrement inventory
     await prisma.productListing.update({
       where: { id: productListingId },
@@ -127,9 +181,96 @@ const placeDirectOrder = async (req, res) => {
   }
 }
 
+// Move this from ProductListingController
+async function placeOrder(req, res) {
+  try {
+    const { productId, quantityOrdered } = req.body;
+    const product = await prisma.productListing.findUnique({
+      where: { id: productId }
+    });
+    if (!product) return ResponseHelper.error(res, 'Product not found');
+    if (product.quantityAvailable < quantityOrdered) {
+      return ResponseHelper.error(res, 'Not enough stock available');
+    }
+    // Decrease the available quantity
+    const updatedProduct = await prisma.productListing.update({
+      where: { id: productId },
+      data: { quantityAvailable: product.quantityAvailable - quantityOrdered }
+    });
+    // Save order
+    const order = await prisma.order.create({
+      data: {
+        buyerId: req.user.userId,
+        farmerId: product.farmerId,
+        totalAmount: quantityOrdered * product.pricePerUnit,
+        commissionFee: (quantityOrdered * product.pricePerUnit) * 0.05,
+        finalAmount: (quantityOrdered * product.pricePerUnit) * 1.05,
+        logisticsType: 'BUYER_PICKUP', // or accept from req.body
+        items: {
+          create: {
+            productListingId: productId,
+            quantity: quantityOrdered,
+            unitOfMeasure: product.unitOfMeasure,
+            priceAtTimeOfOrder: product.pricePerUnit
+          }
+        }
+      },
+      include: { items: true }
+    });
+    ResponseHelper.success(res, 'Order placed successfully', { order, updatedProduct });
+  } catch (err) {
+    console.error('Place order error:', err);
+    ResponseHelper.error(res, 'Failed to place order', err);
+  }
+}
+
+// order summary
+async function getOrderSummary(req, res) {
+  try {
+    const order = await prisma.order.findUnique({
+      where:{ id:req.params.orderId },
+      include:{ items:true, farmer:true, buyer:true }
+    })
+    if(!order) return ResponseHelper.error(res,'Order not found')
+    ResponseHelper.success(res,'Order summary', order)
+  } catch(e) {
+    ResponseHelper.error(res,'Failed to fetch summary', e)
+  }
+}
+
+// buyer history
+async function buyerOrderHistory(req, res) {
+  try {
+    const orders = await prisma.order.findMany({
+      where:{ buyerId:req.params.buyerId },
+      include:{ items:true, farmer:true }
+    })
+    ResponseHelper.success(res,'Buyer order history', orders)
+  } catch(e) {
+    ResponseHelper.error(res,'Failed to fetch buyer history', e)
+  }
+}
+
+// farmer history
+async function farmerOrderHistory(req, res) {
+  try {
+    const orders = await prisma.order.findMany({
+      where:{ farmerId:req.params.farmerId },
+      include:{ items:true, buyer:true }
+    })
+    ResponseHelper.success(res,'Farmer order history', orders)
+  } catch(e) {
+    ResponseHelper.error(res,'Failed to fetch farmer history', e)
+  }
+}
+
 module.exports = {
+  NegotiationController,
   addToCart,
   placeDirectOrder,
-  NegotiationController
+  placeOrder,
+  getOrderSummary,
+  buyerOrderHistory,
+  farmerOrderHistory
 }
 

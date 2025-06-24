@@ -5,7 +5,11 @@ const helmet = require("helmet") // Security headers
 const compression = require("compression") // Response compression
 const morgan = require("morgan") // HTTP request logger
 const rateLimit = require("express-rate-limit") // Rate limiting
+const http = require("http")
+const { Server } = require("socket.io")
+
 require("dotenv").config() // Load environment variables
+
 
 // Import route modules
 const authRoutes = require("./src/routes/auth.routes")
@@ -14,19 +18,16 @@ const adminRoutes = require("./src/routes/admin.routes")
 const productSearchRoutes = require('./src/routes/productSearch.routes')
 const productListingroutes = require("./src/routes/productListing.routes")
 const orderAndNegotiationRoute = require("./src/routes/order.routes")
-// const profileRoutes = require("./routes/profiles")
-// const reviewRoutes = require("./routes/reviews")
-// const notificationRoutes = require("./routes/notifications")
-// const onboardingRoutes = require("./routes/onboarding")
-// Registration helpers
-// const emailRoutes = require("./routes/emails")
-
-// Import middleware
-// const { errorHandler } = require("./middleware/errorHandler")
-// const { notFound } = require("./middleware/notFound")
+const paymentRoutes = require("./src/routes/payment.routes")
+const catalogRoutes = require("./src/routes/catalog.routes") // Catalog management routes
 
 // Create Express application
 const app = express()
+
+// create HTTP server and Socket.IO instance
+const server = http.createServer(app)
+const io = new Server(server, { cors: { origin: "*" } })
+app.set("socketio", io)
 
 /**
  * SECURITY MIDDLEWARE
@@ -92,27 +93,16 @@ app.use("/api/users", userRoutes) // User management routes
 app.use("/api/admin", adminRoutes) // Admin-only routes
 app.use('/api/search', productSearchRoutes) // Product search and discovery routes
 app.use("/api/order", orderAndNegotiationRoute) // order and negotiation
-// app.use("/api/profiles", profileRoutes) // User profile management
-// app.use("/api/reviews", reviewRoutes) // Review and rating system
-// app.use("/api/notifications", notificationRoutes) // Notification management
-// app.use("/api/onboarding", onboardingRoutes) // User onboarding flow
+app.use("/api/payments", paymentRoutes) // Payment processing routes
+app.use("/api/catalog", catalogRoutes) // Catalog management routes
 
-// app.use("/api/emails", emailRoutes) // Email management (admin only)
-
-/**
- * ERROR HANDLING MIDDLEWARE
- * Must be defined after all routes
- */
-// app.use(notFound) // Handle 404 errors for undefined routes
-// app.use(errorHandler) // Handle all other errors
-
-/**
- * START SERVER
- * Get port from environment variable or default to 5000
- */
 const PORT = process.env.PORT || 5000
 
-app.listen(PORT, () => {
+// replace app.listen with server.listen to enable WebSocket support
+// app.listen(PORT, () => {
+//   ...existing logs...
+// })
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
   console.log(`📧 Email service configured and ready`)
   console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`)
