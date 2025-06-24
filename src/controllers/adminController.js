@@ -1,8 +1,6 @@
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 const ResponseHelper = require('../utils/responseHelper')
-const { Parser } = require('json2csv')
-const PaystackService = require('../services/paystackService')
 
 class AdminController {
   // Fetch users awaiting verification
@@ -235,65 +233,8 @@ class AdminController {
       ResponseHelper.error(res, 'Failed to send broadcast', err);
     }
   }
-
-  static async exportTransactions(req, res) {
-    const { dateFrom, dateTo, type, status } = req.query
-    let where = {}
-    if (dateFrom || dateTo) where.createdAt = {}
-    if (dateFrom) where.createdAt.gte = new Date(dateFrom)
-    if (dateTo) where.createdAt.lte = new Date(dateTo)
-    if (type) where.type = type.toUpperCase()
-    if (status) where.status = status.toUpperCase()
-
-    const data = await prisma.transaction.findMany({ where })
-    const csv = new Parser().parse(data)
-    res.header('Content-Type','text/csv')
-    res.attachment('transactions.csv').send(csv)
-  }
-
-  static async exportOrders(req, res) {
-    const { dateFrom, dateTo, status } = req.query
-    let where = {}
-    if (dateFrom||dateTo) where.createdAt = {}
-    if (dateFrom) where.createdAt.gte = new Date(dateFrom)
-    if (dateTo) where.createdAt.lte = new Date(dateTo)
-    if (status) where.status = status.toUpperCase()
-
-    const data = await prisma.order.findMany({ where })
-    const csv = new Parser().parse(data)
-    res.header('Content-Type','text/csv')
-    res.attachment('orders.csv').send(csv)
-  }
-
-  static async resolveDispute(req, res) {
-    const { id } = req.params
-    const { resolutionNotes } = req.body
-    // update dispute & refund
-    const disp = await prisma.dispute.update({
-      where:{ id },
-      data:{ status:'RESOLVED', resolutionNotes }
-    })
-    await prisma.order.update({
-      where:{ id: disp.orderId },
-      data:{ paymentStatus:'REFUNDED', status:'CANCELLED' }
-    })
-    // refund via Paystack
-    const txn = await prisma.transaction.findFirst({
-      where:{ orderId: disp.orderId, type:'PAYMENT', status:'SUCCESSFUL' }
-    })
-    await PaystackService.paystackClient.transaction.refund(txn.gatewayReference)
-    await prisma.transaction.create({
-      data:{
-        userId: disp.raisedById,
-        orderId: disp.orderId,
-        amount: txn.amount,
-        type: 'REFUND',
-        status: 'PENDING',
-        gatewayReference: txn.gatewayReference
-      }
-    })
-    ResponseHelper.success(res,'Dispute resolved and refund initiated',null)
-  }
 }
+
+
 
 module.exports = AdminController

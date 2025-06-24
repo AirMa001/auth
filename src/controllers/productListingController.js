@@ -1,7 +1,6 @@
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 const ResponseHelper = require('../utils/responseHelper')
-const fileService = require('../services/fileService')
 
 class ProductListingController {
   static async createListing(req, res) {
@@ -20,22 +19,8 @@ class ProductListingController {
 
         const quantityAvailable = parseFloat(req.body.quantityAvailable);
         const parsedPrice = parseFloat(pricePerUnit);
-
-        // collect uploaded files
-        const photoFiles = req.files.photos || []
-        const videoFiles = req.files.videos || []
-
-        // enforce limits
-        if (photoFiles.length > 10) {
-          return ResponseHelper.validationError(res, [{ field: 'photos', message: 'Max 10 photos allowed' }])
-        }
-        if (videoFiles.length > 5) {
-          return ResponseHelper.validationError(res, [{ field: 'videos', message: 'Max 5 videos allowed' }])
-        }
-
-        // upload all and get signed URLs
-        const photoUrls = await fileService.uploadMultipleAndGetSignedUrls(photoFiles)
-        const videoUrls = await fileService.uploadMultipleAndGetSignedUrls(videoFiles)
+        const photoUrls = req.files?.map(file => `/uploads/${file.filename}`) || [];
+        const videoUrls = videoFiles.map(file => `/uploads/${file.filename}`) || []
 
         const newListing = await prisma.productListing.create({
           data: {
@@ -50,7 +35,7 @@ class ProductListingController {
             category,
             variety,
             photos: photoUrls,
-            videoUrl: videoUrls[0] || null  // store first video link
+            videos: videoUrls
           }
         });
 
@@ -116,27 +101,35 @@ static async getAllListings(req, res) {
     }
   }
 
-  static async updateListingStatus(req, res) {
+  static async pauseListing(req, res) {
     try {
-      const listing = await prisma.productListing.findUnique({
-        where: { id: req.params.id }
-      })
-      const newStatus = !listing.isActive
-      const updated = await prisma.productListing.update({
+      const paused = await prisma.productListing.update({
         where: { id: req.params.id },
-        data: { isActive: newStatus }
+        data: { isActive: false }
       })
       const io = req.app.get('socketio')
-      io.emit('listingStatusChanged', updated)
-
-      ResponseHelper.success(res, 'Listing status changed', updated)
+      io.emit('listingPaused', paused)
+      ResponseHelper.success(res, 'Listing paused', paused)
     } catch (err) {
-      console.error('Update listing status error:', err)
-      ResponseHelper.error(res, 'Failed to change listing status', err)
+      console.error('Pause listing error:', err)
+      ResponseHelper.error(res, 'Failed to pause listing', err)
     }
   }
 
-  
+  static async unpauseListing(req, res) {
+    try {
+      const unpaused = await prisma.productListing.update({
+        where: { id: req.params.id },
+        data: { isActive: true }
+      })
+      const io = req.app.get('socketio')
+      io.emit('listingUnpaused', unpaused)
+      ResponseHelper.success(res, 'Listing unpaused', unpaused)
+    } catch (err) {
+      console.error('Unpause listing error:', err)
+      ResponseHelper.error(res, 'Failed to unpause listing', err)
+    }
+  }
 
   static async placeOrder(req, res) {
   try {
@@ -177,7 +170,5 @@ static async getAllListings(req, res) {
   }
 }
 }
-
-module.exports = ProductListingController
 
 module.exports = ProductListingController

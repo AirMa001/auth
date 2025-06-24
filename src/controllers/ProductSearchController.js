@@ -144,6 +144,208 @@ class ProductSearchController {
       ResponseHelper.error(res, 'Failed to search products', err)
     }
   }
+
+  static async getSearchSuggestions(req, res) {
+    try {
+      const { query } = req.query
+      
+      if (!query) {
+        return ResponseHelper.success(res, 'Search suggestions', [])
+      }
+
+      const [categories, varieties, listings] = await Promise.all([
+        prisma.cropCategory.findMany({
+          where: { name: { contains: query, mode: 'insensitive' } },
+          take: 5
+        }),
+        prisma.cropVariety.findMany({
+          where: { name: { contains: query, mode: 'insensitive' } },
+          include: { category: true },
+          take: 5
+        }),
+        prisma.productListing.findMany({
+          where: { 
+            title: { contains: query, mode: 'insensitive' },
+            isActive: true 
+          },
+          take: 5
+        })
+      ])
+
+      ResponseHelper.success(res, 'Search suggestions fetched', {
+        categories,
+        varieties,
+        listings
+      })
+    } catch (err) {
+      console.error('Get search suggestions error:', err)
+      ResponseHelper.error(res, 'Failed to get search suggestions', err)
+    }
+  }
+
+  static async saveSearch(req, res) {
+    try {
+      const { userId } = req.params
+      const { name, filters } = req.body
+
+      if (!name || !filters) {
+        return ResponseHelper.error(res, 'Name and filters are required', null, 400)
+      }
+
+      const buyer = await prisma.buyerProfile.findUnique({
+        where: { userId }
+      })
+
+      if (!buyer) {
+        return ResponseHelper.error(res, 'Buyer profile not found', null, 404)
+      }
+
+      const currentSearches = buyer.savedSearches || { searches: [] }
+      currentSearches.searches.push({
+        id: Date.now().toString(),
+        name,
+        filters,
+        createdAt: new Date(),
+        isActive: true
+      })
+
+      await prisma.buyerProfile.update({
+        where: { userId },
+        data: { savedSearches: currentSearches }
+      })
+
+      ResponseHelper.success(res, 'Search saved successfully')
+    } catch (err) {
+      console.error('Save search error:', err)
+      ResponseHelper.error(res, 'Failed to save search', err)
+    }
+  }
+
+  static async getSavedSearches(req, res) {
+    try {
+      const { userId } = req.params
+
+      const buyer = await prisma.buyerProfile.findUnique({
+        where: { userId },
+        select: { savedSearches: true }
+      })
+
+      if (!buyer) {
+        return ResponseHelper.error(res, 'Buyer profile not found', null, 404)
+      }
+
+      ResponseHelper.success(res, 'Saved searches fetched', buyer.savedSearches?.searches || [])
+    } catch (err) {
+      console.error('Get saved searches error:', err)
+      ResponseHelper.error(res, 'Failed to get saved searches', err)
+    }
+  }
+
+  static async deleteSavedSearch(req, res) {
+    try {
+      const { userId, searchId } = req.params
+
+      const buyer = await prisma.buyerProfile.findUnique({
+        where: { userId }
+      })
+
+      if (!buyer) {
+        return ResponseHelper.error(res, 'Buyer profile not found', null, 404)
+      }
+
+      const currentSearches = buyer.savedSearches || { searches: [] }
+      const updatedSearches = currentSearches.searches.filter(
+        search => search.id !== searchId
+      )
+
+      await prisma.buyerProfile.update({
+        where: { userId },
+        data: { savedSearches: { searches: updatedSearches } }
+      })
+
+      ResponseHelper.success(res, 'Search deleted successfully')
+    } catch (err) {
+      console.error('Delete saved search error:', err)
+      ResponseHelper.error(res, 'Failed to delete saved search', err)
+    }
+  }
+
+  static async toggleSearchAlert(req, res) {
+    try {
+      const { userId, searchId } = req.params
+      const { isActive } = req.body
+
+      const buyer = await prisma.buyerProfile.findUnique({
+        where: { userId }
+      })
+
+      if (!buyer) {
+        return ResponseHelper.error(res, 'Buyer profile not found', null, 404)
+      }
+
+      const currentSearches = buyer.savedSearches || { searches: [] }
+      const updatedSearches = currentSearches.searches.map(search => {
+        if (search.id === searchId) {
+          return { ...search, isActive }
+        }
+        return search
+      })
+
+      await prisma.buyerProfile.update({
+        where: { userId },
+        data: { savedSearches: { searches: updatedSearches } }
+      })
+
+      ResponseHelper.success(res, 'Search alert updated successfully')
+    } catch (err) {
+      console.error('Toggle search alert error:', err)
+      ResponseHelper.error(res, 'Failed to update search alert', err)
+    }
+  }
+
+  static async checkSearchAlerts() {
+    try {
+      const buyers = await prisma.buyerProfile.findMany({
+        where: {
+          savedSearches: {
+            path: ['searches'],
+            array_contains: { isActive: true }
+          }
+        }
+      })
+
+      for (const buyer of buyers) {
+        if (!buyer.savedSearches?.searches) continue
+
+        const activeSearches = buyer.savedSearches.searches.filter(
+          search => search.isActive
+        )
+
+        for (const search of activeSearches) {
+          const results = await prisma.productListing.findMany({
+            where: {
+              isActive: true,
+              ...search.filters
+            },
+            take: 5
+          })
+
+          if (results.length > 0) {
+            await prisma.notification.create({
+              data: {
+                userId: buyer.userId,
+                type: 'MATCHMAKING_SUGGESTION',
+                content: `New listings match your saved search "${search.name}"`,
+                relatedId: results[0].id
+              }
+            })
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Check search alerts error:', err)
+    }
+  }
 }
 
 module.exports = ProductSearchController

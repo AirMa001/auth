@@ -32,13 +32,4 @@ const uploadAndGetSignedUrl = async (file) => {
   return { fileKey, presignedUrl };
 };
 
-async function uploadMultipleAndGetSignedUrls(files) {
-  const uploads = await Promise.all(files.map(f => uploadAndGetSignedUrl(f)));
-  return uploads.map(u => u.presignedUrl);
-}
-
-module.exports = {
-  uploadAndGetSignedUrl,
-  generatePresignedUrl,
-  uploadMultipleAndGetSignedUrls
-};
+module.exports = { uploadAndGetSignedUrl, generatePresignedUrl };
