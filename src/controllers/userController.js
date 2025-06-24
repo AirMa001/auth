@@ -215,66 +215,6 @@ class UserController {
       ResponseHelper.error(res,'Failed to fetch reviews');
     }
   }
-
-  // list all addresses for current user
-  static async listAddresses(req, res) {
-    const addresses = await prisma.address.findMany({
-      where:{ userId: req.user.userId }
-    })
-    ResponseHelper.success(res,'Addresses fetched', addresses)
-  }
-
-  // create a new address
-  static async createAddress(req, res) {
-    const { street, city, state, country, isDefault } = req.body
-    if (!street||!city||!state) {
-      return ResponseHelper.validationError(res, [{ field: 'street/city/state', message: 'Required' }])
-    }
-    // unset old default if needed
-    if (isDefault) {
-      await prisma.address.updateMany({
-        where:{ userId: req.user.userId, isDefault: true },
-        data:{ isDefault: false }
-      })
-    }
-    const addr = await prisma.address.create({
-      data:{ userId: req.user.userId, street, city, state, country, isDefault }
-    })
-    ResponseHelper.success(res,'Address created', addr,201)
-  }
-
-  // update an existing address
-  static async updateAddress(req, res) {
-    const { addressId } = req.params
-    const { street, city, state, country, isDefault } = req.body
-    // ensure belongs to user
-    const existing = await prisma.address.findUnique({ where:{ id: addressId }})
-    if (!existing || existing.userId!==req.user.userId) {
-      return ResponseHelper.error(res,'Address not found')
-    }
-    if (isDefault) {
-      await prisma.address.updateMany({
-        where:{ userId: req.user.userId, isDefault: true },
-        data:{ isDefault: false }
-      })
-    }
-    const updated = await prisma.address.update({
-      where:{ id: addressId },
-      data:{ street, city, state, country, isDefault }
-    })
-    ResponseHelper.success(res,'Address updated', updated)
-  }
-
-  // delete an address
-  static async deleteAddress(req, res) {
-    const { addressId } = req.params
-    const existing = await prisma.address.findUnique({ where:{ id: addressId }})
-    if (!existing || existing.userId!==req.user.userId) {
-      return ResponseHelper.error(res,'Address not found')
-    }
-    await prisma.address.delete({ where:{ id: addressId }})
-    ResponseHelper.success(res,'Address deleted')
-  }
 }
 
 module.exports = UserController
