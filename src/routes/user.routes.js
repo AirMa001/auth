@@ -51,4 +51,10 @@ router.get(
   UserController.getReviews
 );
 
+// address book CRUD
+router.get('/me/addresses',                 auth, UserController.listAddresses)
+router.post('/me/addresses',                auth, UserController.createAddress)
+router.put('/me/addresses/:addressId',      auth, UserController.updateAddress)
+router.delete('/me/addresses/:addressId',   auth, UserController.deleteAddress)
+
 module.exports = router;
